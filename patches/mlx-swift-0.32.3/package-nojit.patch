@@ -1,0 +1,11 @@
+--- a/Package.swift
++++ b/Package.swift
+@@ -290,7 +290,7 @@
+ 
+         // see PrepareMetalShaders -- don't build the kernels in place
+         "mlx/mlx/backend/metal/kernels",
+-        "mlx/mlx/backend/metal/nojit_kernels.cpp",
++        "mlx/mlx/backend/metal/jit_kernels.cpp",
+ 
+         // distributed backends: enable ring, disable MPI + NCCL + JACCL
+         "mlx/mlx/distributed/mpi/mpi.cpp",

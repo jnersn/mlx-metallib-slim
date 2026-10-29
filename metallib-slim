@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""metallib-slim: cut MLX's precompiled mlx.metallib down to the kernels an app uses.
+
+usage: metallib-slim <command> [arguments]
+
+Prepare the sources
+  prepare-source         no-JIT copy of a pinned mlx-swift checkout and a package that builds against it
+  prepare-trace-source   the same copy plus the kernel-name trace hook (for discovery builds only)
+Build the allowlist
+  allowlist build        union of kernel-name traces, frozen with its SHA-256
+  allowlist verify       check a frozen allowlist
+Reduce and verify
+  record                 record and check the full mlx-metallib CMake build
+  scan                   check that every kernel file of the full build can be filtered (no allowlist needed)
+  reduce                 build the reduced mlx.metallib from the full build's commands and an allowlist
+  names                  list the functions of a metallib (needs a Metal device)
+  verify                 every allowlisted kernel is in the reduced library, nothing it holds is new
+  repro                  compare two clean reduced builds
+  check-macho            Mach-O section checks of the binaries you ship (payload-equal, no-coverage, ...)
+
+Run `metallib-slim <command> --help` for a command's arguments.
+"""
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+ROOT = Path(__file__).resolve().parent
+LIB = ROOT / "metallib_slim"
+
+
+def load(name: str):
+    import importlib.util
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, LIB / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def names(argv: list) -> int:
+    """metallib-slim names <file.metallib> <out.json>: compiles metallib_names.swift once per run and reflects the library on the Metal device."""
+    if len(argv) != 2 or argv[0] in ("-h", "--help"):
+        print("usage: metallib-slim names <file.metallib> <out.json>   (needs swiftc and a Metal device)")
+        return 0 if argv and argv[0] in ("-h", "--help") else 2
+    with tempfile.TemporaryDirectory(prefix="metallib-slim-") as tmp:
+        binary = Path(tmp) / "metallib-names"
+        build = subprocess.run(["swiftc", "-O", str(LIB / "metallib_names.swift"), "-o", str(binary)], capture_output=True, text=True)
+        if build.returncode != 0:
+            print(f"metallib-slim names: swiftc failed\n{build.stderr[-2000:]}", file=sys.stderr)
+            return 1
+        return subprocess.run([str(binary), *argv]).returncode
+
+
+def main(argv: list) -> int:
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return 0 if argv else 2
+    command, rest = argv[0], argv[1:]
+    sys.argv[0] = "metallib-slim"  # argparse usage lines read "metallib-slim <command> ..."
+    modules = {"prepare-source": "prepare_source", "prepare-trace-source": "prepare_trace_source", "allowlist": "allowlist", "record": "metallib_record"}
+    if command in modules:
+        sys.argv[0] = f"metallib-slim {command}"
+        return load(modules[command]).cli(rest)
+    if command in ("scan", "reduce", "verify", "repro"):
+        return load("reduce_library").cli([command, *rest])
+    if command == "names":
+        return names(rest)
+    if command == "check-macho":
+        return load("macho_check").cli(["check-macho", *rest])
+    print(f"metallib-slim: unknown command {command!r}\n\n{__doc__.strip()}", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

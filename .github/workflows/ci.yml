@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python version
+        run: /usr/bin/python3 --version
+      - name: Tests (system Python)
+        run: /usr/bin/python3 -B -m unittest discover -s tests -v
+      - name: Entry point
+        run: ./metallib-slim --help
+      - name: Type-check the Swift reflector
+        run: swiftc -typecheck metallib_slim/metallib_names.swift
