@@ -2,7 +2,7 @@
 
 The project uses semantic versioning. Before 1.0.0, a minor version may change the command line, the file formats or the source edits.
 
-## Unreleased
+## 0.1.0
 
 First release.
 
